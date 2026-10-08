@@ -1,0 +1,366 @@
+--[[
+    Bjhub - Universal Teleport + Checkpoints (Keyless)
+    Teleport: type  X, Y, Z  then press TELEPORT!
+    Checkpoint: (optional) type a name, press MAKE CHECKPOINT.
+    A new button appears that teleports you back to that spot.
+]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local BLUE = Color3.fromRGB(0, 140, 255)
+local GREEN = Color3.fromRGB(40, 180, 80)
+local RED = Color3.fromRGB(200, 50, 50)
+
+-- Pick the safest place to put the GUI
+local function getGuiParent()
+    local ok, parent = pcall(function()
+        if gethui then return gethui() end
+        return game:GetService("CoreGui")
+    end)
+    if ok and parent then return parent end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- Remove old copy if executed twice
+local parent = getGuiParent()
+local old = parent:FindFirstChild("Ajhub")
+if old then old:Destroy() end
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "Ajhub"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = parent
+
+-- Small, see-through window (does NOT cover the screen)
+local BASE_H = 206
+local frame = Instance.new("Frame")
+frame.Name = "Main"
+frame.Size = UDim2.fromOffset(250, BASE_H)
+frame.Position = UDim2.new(0.5, -125, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundTransparency = 0.55
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 28)
+title.Position = UDim2.fromOffset(10, 4)
+title.BackgroundTransparency = 1
+title.Text = "Ajhub"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.Parent = frame
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(24, 24)
+close.Position = UDim2.new(1, -30, 0, 6)
+close.BackgroundColor3 = RED
+close.BackgroundTransparency = 0.3
+close.Text = "X"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.Font = Enum.Font.GothamBold
+close.TextSize = 14
+close.BorderSizePixel = 0
+close.Parent = frame
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
+close.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+-- Helper: semi-transparent text box (same look for both boxes)
+local function makeBox(y, placeholder)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -20, 0, 34)
+    box.Position = UDim2.fromOffset(10, y)
+    box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    box.BackgroundTransparency = 0.45
+    box.BorderSizePixel = 0
+    box.Text = ""
+    box.PlaceholderText = placeholder
+    box.PlaceholderColor3 = Color3.fromRGB(190, 190, 190)
+    box.TextColor3 = Color3.new(1, 1, 1)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 14
+    box.ClearTextOnFocus = false
+    box.Parent = frame
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 8)
+    local stroke = Instance.new("UIStroke", box)
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Transparency = 0.5
+    return box
+end
+
+-- Helper: solid button (same look for all main buttons)
+local function makeButton(y, text, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -20, 0, 36)
+    b.Position = UDim2.fromOffset(10, y)
+    b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.Parent = frame
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    return b
+end
+
+local function flash(btn, text, color, defaultText, defaultColor)
+    btn.Text = text
+    btn.BackgroundColor3 = color
+    task.delay(1.2, function()
+        if btn and btn.Parent then
+            btn.Text = defaultText
+            btn.BackgroundColor3 = defaultColor
+        end
+    end)
+end
+
+local function getRoot()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+-- Coordinate teleport
+local coordBox = makeBox(38, "Enter position: X, Y, Z")
+local tpButton = makeButton(82, "TELEPORT!", BLUE)
+
+tpButton.MouseButton1Click:Connect(function()
+    local nums = {}
+    for n in string.gmatch(coordBox.Text, "-?%d*%.?%d+") do
+        table.insert(nums, tonumber(n))
+    end
+
+    if #nums < 3 then
+        flash(tpButton, "Enter X, Y, Z", RED, "TELEPORT!", BLUE)
+        return
+    end
+
+    local hrp = getRoot()
+    if not hrp then
+        flash(tpButton, "No character", RED, "TELEPORT!", BLUE)
+        return
+    end
+
+    hrp.CFrame = CFrame.new(nums[1], nums[2], nums[3])
+    flash(tpButton, "Teleported!", GREEN, "TELEPORT!", BLUE)
+end)
+
+-- Checkpoints
+local nameBox = makeBox(126, "Checkpoint name (optional)")
+nameBox.Size = UDim2.new(1, -20, 0, 30)
+local cpButton = makeButton(162, "MAKE CHECKPOINT", GREEN)
+
+local ROW_H = 34
+local MAX_VISIBLE = 4
+
+local scroll = Instance.new("ScrollingFrame")
+scroll.Position = UDim2.fromOffset(10, 206)
+scroll.Size = UDim2.new(1, -20, 0, 0)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 3
+scroll.CanvasSize = UDim2.new()
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.Visible = false
+scroll.Parent = frame
+
+local layout = Instance.new("UIListLayout", scroll)
+layout.Padding = UDim.new(0, 4)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local cpCount = 0   -- checkpoints currently shown
+local cpMade = 0    -- total made (used for default names)
+
+local function updateSize()
+    local visible = math.min(cpCount, MAX_VISIBLE)
+    scroll.Visible = cpCount > 0
+    scroll.Size = UDim2.new(1, -20, 0, visible * ROW_H)
+    frame.Size = UDim2.fromOffset(250, BASE_H + (cpCount > 0 and (visible * ROW_H + 6) or 0))
+end
+
+cpButton.MouseButton1Click:Connect(function()
+    local hrp = getRoot()
+    if not hrp then
+        flash(cpButton, "No character", RED, "MAKE CHECKPOINT", GREEN)
+        return
+    end
+
+    local savedPos = hrp.Position
+    cpMade += 1
+    cpCount += 1
+
+    local name = nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then name = "Checkpoint " .. cpMade end
+    nameBox.Text = ""
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -6, 0, 30)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = cpMade
+    row.Parent = scroll
+
+    local goBtn = Instance.new("TextButton")
+    goBtn.Size = UDim2.new(1, -34, 1, 0)
+    goBtn.BackgroundColor3 = BLUE
+    goBtn.BackgroundTransparency = 0
+    goBtn.BorderSizePixel = 0
+    goBtn.Text = name
+    goBtn.TextColor3 = Color3.new(1, 1, 1)
+    goBtn.Font = Enum.Font.GothamBold
+    goBtn.TextSize = 14
+    goBtn.TextTruncate = Enum.TextTruncate.AtEnd
+    goBtn.Parent = row
+    Instance.new("UICorner", goBtn).CornerRadius = UDim.new(0, 8)
+
+    local delBtn = Instance.new("TextButton")
+    delBtn.Size = UDim2.new(0, 28, 1, 0)
+    delBtn.Position = UDim2.new(1, -28, 0, 0)
+    delBtn.BackgroundColor3 = RED
+    delBtn.BackgroundTransparency = 0.3
+    delBtn.BorderSizePixel = 0
+    delBtn.Text = "X"
+    delBtn.TextColor3 = Color3.new(1, 1, 1)
+    delBtn.Font = Enum.Font.GothamBold
+    delBtn.TextSize = 14
+    delBtn.Parent = row
+    Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 6)
+
+    goBtn.MouseButton1Click:Connect(function()
+        local root = getRoot()
+        if root then
+            root.CFrame = CFrame.new(savedPos)
+        end
+    end)
+
+    delBtn.MouseButton1Click:Connect(function()
+        row:Destroy()
+        cpCount -= 1
+        updateSize()
+    end)
+
+    updateSize()
+    flash(cpButton, "Saved!", BLUE, "MAKE CHECKPOINT", GREEN)
+end)
+
+-- Top-center RESET / LEAVE buttons (separate from the main window, mobile friendly)
+local topBar = Instance.new("Frame")
+topBar.Name = "TopButtons"
+topBar.AnchorPoint = Vector2.new(0.5, 0)
+topBar.Position = UDim2.new(0.5, 0, 0, 12)
+topBar.Size = UDim2.fromOffset(216, 42)
+topBar.BackgroundTransparency = 1
+topBar.Parent = gui
+
+local function makeTopButton(x, text, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(104, 42)
+    b.Position = UDim2.fromOffset(x, 0)
+    b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.Parent = topBar
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    return b
+end
+
+local resetBtn = makeTopButton(0, "RESET", Color3.fromRGB(230, 140, 0))
+local leaveBtn = makeTopButton(112, "LEAVE", RED)
+
+resetBtn.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Health = 0
+    elseif char then
+        char:BreakJoints()
+    end
+end)
+
+leaveBtn.MouseButton1Click:Connect(function()
+    local ok = pcall(function() game:Shutdown() end)
+    if not ok then
+        LocalPlayer:Kick("You left the game.")
+    end
+end)
+
+-- Top-left LOCK / HIDE UI buttons (fixed in place, below the Roblox menu button)
+local locked = false
+local hidden = false
+
+local function makeCornerButton(y, text, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(100, 38)
+    b.Position = UDim2.fromOffset(12, y)
+    b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 15
+    b.Parent = gui
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    return b
+end
+
+local PURPLE = Color3.fromRGB(130, 80, 220)
+local lockBtn = makeCornerButton(66, "LOCK", BLUE)
+local hideBtn = makeCornerButton(110, "HIDE UI", PURPLE)
+
+lockBtn.MouseButton1Click:Connect(function()
+    locked = not locked
+    if locked then
+        lockBtn.Text = "UNLOCK"
+        lockBtn.BackgroundColor3 = GREEN
+    else
+        lockBtn.Text = "LOCK"
+        lockBtn.BackgroundColor3 = BLUE
+    end
+end)
+
+hideBtn.MouseButton1Click:Connect(function()
+    hidden = not hidden
+    frame.Visible = not hidden
+    topBar.Visible = not hidden
+    hideBtn.Text = hidden and "SHOW UI" or "HIDE UI"
+end)
+
+-- Dragging (drag by empty frame space)
+local dragging, dragStart, startPos
+frame.InputBegan:Connect(function(input)
+    if locked then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
